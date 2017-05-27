@@ -32,15 +32,17 @@ struct ImageStructGenerator: ExternalOnlyStructGenerator {
     let allFunctions = assetFolderImageNames + imagesNames
     let groupedFunctions = allFunctions.groupedBySwiftIdentifier { $0 }
 
-    let assetSubfolders = assetFolders
-      .flatMap { $0.subfolders }
-      .mergeDuplicates()
-      .removeConflicting(with: allFunctions.map({ "\(SwiftIdentifier(name: $0))" }))
-
-    let structs = assetSubfolders
-      .map { $0.generatedStruct(at: externalAccessLevel, prefix: qualifiedName) }
-
     groupedFunctions.printWarningsForDuplicatesAndEmpties(source: "image", result: "image")
+
+
+    let assetSubfolders = AssetSubfolders(
+      all: assetFolders.flatMap { $0.subfolders },
+      assetIdentifiers: allFunctions.map { SwiftIdentifier(name: $0) })
+
+    assetSubfolders.printWarningsForDuplicates()
+
+    let structs = assetSubfolders.folders
+      .map { $0.generatedStruct(at: externalAccessLevel, prefix: qualifiedName) }
 
     let imageLets = groupedFunctions
       .uniques
@@ -89,32 +91,3 @@ struct ImageStructGenerator: ExternalOnlyStructGenerator {
     )
   }
 }
-
-extension Array where Element: NamespacedAssetSubfolder {
-  func mergeDuplicates() -> [Element] {
-    var dict = [String: Element]()
-
-    self.forEach { subfolder in
-      if let duplicate = dict[subfolder.name] {
-        duplicate.subfolders += subfolder.subfolders
-        duplicate.imageAssets += subfolder.imageAssets
-      } else {
-        dict[subfolder.name] = subfolder
-      }
-    }
-
-    return dict.values.map { $0 }
-  }
-
-  func removeConflicting(with allFunctions: [String]) -> [Element] {
-    let uniques = self.filter { !allFunctions.contains($0.name)  }
-    let duplicates = self.filter { allFunctions.contains($0.name)  }
-
-    for subfolder in duplicates {
-      warn("Skipping asset subfolder because symbol '\(subfolder.name)' would conflict with image: \(subfolder.name)")
-    }
-
-    return uniques
-  }
-}
-
